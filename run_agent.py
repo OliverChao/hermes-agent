@@ -607,6 +607,7 @@ class AIAgent:
         checkpoint_max_snapshots: int = 50,
         pass_session_id: bool = False,
         persist_session: bool = True,
+        streaming: bool = True,
     ):
         """
         Initialize the AI Agent.
@@ -798,6 +799,8 @@ class AIAgent:
         
         # Model response configuration
         self.max_tokens = max_tokens  # None = use model default
+        if not streaming:
+            self._disable_streaming = True
         self.reasoning_config = reasoning_config  # None = use default (medium for OpenRouter)
         self.service_tier = service_tier
         self.request_overrides = dict(request_overrides or {})
@@ -5587,6 +5590,12 @@ class AIAgent:
 
                 if chunk.choices[0].finish_reason:
                     finish_reason = chunk.choices[0].finish_reason
+                    logger.debug(
+                        "Stream finish_reason=%s, accumulated tool_calls=%d, content_len=%d",
+                        finish_reason,
+                        len(tool_calls_acc),
+                        sum(len(p) for p in content_parts),
+                    )
 
                 # Usage in the final chunk
                 if hasattr(chunk, "usage") and chunk.usage:
@@ -5605,6 +5614,11 @@ class AIAgent:
                         try:
                             json.loads(arguments)
                         except json.JSONDecodeError:
+                            logger.warning(
+                                "Truncated tool call args detected for %s: %r",
+                                tc["function"]["name"],
+                                arguments[:500],
+                            )
                             has_truncated_tool_args = True
                     mock_tool_calls.append(SimpleNamespace(
                         id=tc["id"],
@@ -6707,6 +6721,7 @@ class AIAgent:
 
         if self.max_tokens is not None:
             api_kwargs.update(self._max_tokens_param(self.max_tokens))
+            logger.debug("max_tokens set to %d in API request", self.max_tokens)
         elif self._is_qwen_portal():
             # Qwen Portal defaults to a very low max_tokens when omitted.
             # Reasoning models (qwen3-coder-plus) exhaust that budget on

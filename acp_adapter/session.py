@@ -438,9 +438,14 @@ class SessionManager:
         model_cfg = config.get("model")
         default_model = ""
         config_provider = None
+        config_max_tokens = None
+        display_cfg = config.get("display", {})
+        config_streaming = display_cfg.get("streaming", True) if isinstance(display_cfg, dict) else True
         if isinstance(model_cfg, dict):
             default_model = str(model_cfg.get("default") or default_model)
             config_provider = model_cfg.get("provider")
+            if model_cfg.get("max_tokens") is not None:
+                config_max_tokens = int(model_cfg["max_tokens"])
         elif isinstance(model_cfg, str) and model_cfg.strip():
             default_model = model_cfg.strip()
 
@@ -450,6 +455,8 @@ class SessionManager:
             "quiet_mode": True,
             "session_id": session_id,
             "model": model or default_model,
+            "max_tokens": config_max_tokens,
+            "streaming": config_streaming,
         }
 
         try:

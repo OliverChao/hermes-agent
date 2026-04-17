@@ -742,6 +742,8 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             acp_command=turn_route["runtime"].get("command"),
             acp_args=turn_route["runtime"].get("args"),
             max_iterations=max_iterations,
+            max_tokens=int(os.environ["HERMES_MAX_OUTPUT_TOKENS"]) if os.environ.get("HERMES_MAX_OUTPUT_TOKENS") else None,
+            streaming=os.environ.get("HERMES_API_STREAMING", "true").lower() not in ("false", "0", "no"),
             reasoning_config=reasoning_config,
             prefill_messages=prefill_messages,
             fallback_model=fallback_model,

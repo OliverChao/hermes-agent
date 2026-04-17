@@ -183,6 +183,12 @@ if _config_path.exists():
                     os.environ[_env_map["base_url"]] = _base_url
                 if _api_key:
                     os.environ[_env_map["api_key"]] = _api_key
+        _model_cfg = _cfg.get("model", {})
+        if isinstance(_model_cfg, dict) and _model_cfg.get("max_tokens") is not None:
+            os.environ.setdefault("HERMES_MAX_OUTPUT_TOKENS", str(_model_cfg["max_tokens"]))
+        _display_cfg_bridge = _cfg.get("display", {})
+        if isinstance(_display_cfg_bridge, dict) and _display_cfg_bridge.get("streaming") is not None:
+            os.environ.setdefault("HERMES_API_STREAMING", str(_display_cfg_bridge["streaming"]).lower())
         _agent_cfg = _cfg.get("agent", {})
         if _agent_cfg and isinstance(_agent_cfg, dict):
             if "max_turns" in _agent_cfg:
@@ -469,6 +475,18 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
     elif isinstance(model_cfg, dict):
         return model_cfg.get("default") or model_cfg.get("model") or ""
     return ""
+
+
+def _resolve_gateway_max_tokens() -> Optional[int]:
+    """Read max output tokens from env (bridged from config.yaml model.max_tokens)."""
+    val = os.environ.get("HERMES_MAX_OUTPUT_TOKENS")
+    return int(val) if val else None
+
+
+def _resolve_gateway_streaming() -> bool:
+    """Read API streaming flag from env (bridged from config.yaml display.streaming)."""
+    val = os.environ.get("HERMES_API_STREAMING", "true")
+    return val.lower() not in ("false", "0", "no")
 
 
 def _resolve_hermes_bin() -> Optional[list[str]]:
@@ -5768,6 +5786,7 @@ class GatewayRunner:
                     model=turn_route["model"],
                     **turn_route["runtime"],
                     max_iterations=max_iterations,
+                    max_tokens=_resolve_gateway_max_tokens(),
                     quiet_mode=True,
                     verbose_logging=False,
                     enabled_toolsets=enabled_toolsets,
@@ -5785,6 +5804,7 @@ class GatewayRunner:
                     user_id=source.user_id,
                     session_db=self._session_db,
                     fallback_model=self._fallback_model,
+                    streaming=_resolve_gateway_streaming(),
                 )
                 try:
                     return agent.run_conversation(
@@ -8668,6 +8688,7 @@ class GatewayRunner:
                     model=turn_route["model"],
                     **turn_route["runtime"],
                     max_iterations=max_iterations,
+                    max_tokens=_resolve_gateway_max_tokens(),
                     quiet_mode=True,
                     verbose_logging=False,
                     enabled_toolsets=enabled_toolsets,
@@ -8688,6 +8709,7 @@ class GatewayRunner:
                     gateway_session_key=session_key,
                     session_db=self._session_db,
                     fallback_model=self._fallback_model,
+                    streaming=_resolve_gateway_streaming(),
                 )
                 if _cache_lock and _cache is not None:
                     with _cache_lock:

@@ -1722,7 +1722,22 @@ class HermesCLI:
             self.max_turns = int(os.getenv("HERMES_MAX_ITERATIONS"))
         else:
             self.max_turns = 90
-        
+
+        # max_tokens (output cap) priority: config file > env var > None (model default)
+        _model_cfg = CLI_CONFIG.get("model", {})
+        _cfg_max_tokens = _model_cfg.get("max_tokens") if isinstance(_model_cfg, dict) else None
+        if _cfg_max_tokens is not None:
+            self.max_tokens = int(_cfg_max_tokens)
+        elif os.getenv("HERMES_MAX_OUTPUT_TOKENS"):
+            self.max_tokens = int(os.getenv("HERMES_MAX_OUTPUT_TOKENS"))
+        else:
+            self.max_tokens = None
+
+        # API-level streaming: display.streaming controls both display AND API transport.
+        # When False, the agent uses non-streaming (ping-pong) API calls — required for
+        # models/providers that don't support SSE streaming.
+        self.api_streaming = CLI_CONFIG["display"].get("streaming", True)
+
         # Parse and validate toolsets
         self.enabled_toolsets = toolsets
         if toolsets and "all" not in toolsets and "*" not in toolsets:
@@ -2902,6 +2917,7 @@ class HermesCLI:
                 acp_args=runtime.get("args"),
                 credential_pool=runtime.get("credential_pool"),
                 max_iterations=self.max_turns,
+                max_tokens=self.max_tokens,
                 enabled_toolsets=self.enabled_toolsets,
                 verbose_logging=self.verbose,
                 quiet_mode=not self.verbose,
@@ -2932,6 +2948,7 @@ class HermesCLI:
                 tool_complete_callback=self._on_tool_complete if self._inline_diffs_enabled else None,
                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
                 tool_gen_callback=self._on_tool_gen_start if self.streaming_enabled else None,
+                streaming=self.api_streaming,
             )
             # Store reference for atexit memory provider shutdown
             global _active_agent_ref
@@ -5760,6 +5777,7 @@ class HermesCLI:
                     acp_command=turn_route["runtime"].get("command"),
                     acp_args=turn_route["runtime"].get("args"),
                     max_iterations=self.max_turns,
+                    max_tokens=self.max_tokens,
                     enabled_toolsets=self.enabled_toolsets,
                     quiet_mode=True,
                     verbose_logging=False,
@@ -5776,8 +5794,8 @@ class HermesCLI:
                     provider_require_parameters=self._provider_require_params,
                     provider_data_collection=self._provider_data_collection,
                     fallback_model=self._fallback_model,
+                    streaming=self.api_streaming,
                 )
-                # Silence raw spinner; route thinking through TUI widget when no foreground agent is active.
                 bg_agent._print_fn = lambda *_a, **_kw: None
 
                 def _bg_thinking(text: str) -> None:
@@ -5898,6 +5916,7 @@ class HermesCLI:
                     acp_command=turn_route["runtime"].get("command"),
                     acp_args=turn_route["runtime"].get("args"),
                     max_iterations=8,
+                    max_tokens=self.max_tokens,
                     enabled_toolsets=[],
                     quiet_mode=True,
                     verbose_logging=False,
@@ -5917,8 +5936,8 @@ class HermesCLI:
                     skip_memory=True,
                     skip_context_files=True,
                     persist_session=False,
+                    streaming=self.api_streaming,
                 )
-
                 btw_prompt = (
                     "[Ephemeral /btw side question. Answer using the conversation "
                     "context. No tools available. Be direct and concise.]\n\n"
